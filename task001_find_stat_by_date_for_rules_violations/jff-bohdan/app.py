@@ -88,7 +88,7 @@ def generate_output_grouped_by_date_ip_and_violated_rule(input_file_name, is_ip_
     logger.info("saving output data")
     dialect = csv.excel
     dialect.delimiter = ";"
-    header = ["Date", "IP", "Violation Rule", "Violations count"]
+    header = ["date", "ip", "violated rule", "violations count"]
 
     added_rows_count = 0
     with open(output_file_name, "w", newline="") as output_csv_file:

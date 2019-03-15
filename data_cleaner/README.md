@@ -6,7 +6,7 @@ should be excluded.
 Usage:
 
 ```
-python .\data_cleaner\ip_cleaner.py --input .\task001_find_stat_by_date_for_rules_violations\data\data.csv --output .\task001_find_stat_by_date_for_rules_violations\data\clean_data.csv --ip_columns "dst,ip" --delimiter "," --quote_char "\""
+python .\data_cleaner\ip_cleaner.py --input .\task001_find_stat_by_date_for_rules_violations\data\data.csv --output .\task001_find_stat_by_date_for_rules_violations\data\clean_data.csv --ip_columns "dst,ip" --delimiter "," --quote_char "\"" --periodic_interval 10000
 ```
 
 Where:
