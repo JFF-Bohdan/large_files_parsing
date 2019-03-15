@@ -124,7 +124,9 @@ def filter_row_data(
     indexes_to_filter,
     forbidden_networks,
     mock_function,
-    forbidden_cache=None
+    logger,
+    forbidden_cache=None,
+    line_index=None
 ) -> Tuple[List, int]:
     row_len = len(item_row)
 
@@ -135,6 +137,8 @@ def filter_row_data(
             continue
 
         item = str(res[index_to_filter]).strip()
+        if not item:
+            continue
 
         new_value = None
         is_forbidden = False
@@ -143,7 +147,11 @@ def filter_row_data(
             new_value = forbidden_cache[item]
 
         if not is_forbidden:
-            ip_address = ipaddress.ip_address(item)
+            try:
+                ip_address = ipaddress.ip_address(item)
+            except BaseException as e:
+                logger.error("Error converting {} (line={}) to IP address: {}".format(item, line_index, e))
+                raise
 
             is_forbidden = False
             for networks in forbidden_networks:
@@ -207,10 +215,15 @@ def main():
     total_records_processed = 0
     total_items_filtered = 0
     forbidden_items_cache = dict()
+    total_size_processed = 0
+    total_file_size = os.path.getsize(args.input)
+
     with codecs.open(args.output, "w", "utf-8") as output_file:
         data_writer = csv.writer(output_file, delimiter=args.delimiter, quotechar=args.quote_char)
 
         for item_index, item_row in enumerate(iterate_over_input_data(args.input, args.delimiter, args.quote_char)):
+            total_size_processed += len(str(item_row)) + 2
+
             if not item_index:
                 indexes_to_filter = parse_header_indexes(item_row, ip_columns)
                 data_writer.writerow(item_row)
@@ -221,14 +234,29 @@ def main():
                 args.periodic_interval and
                 (total_records_processed % args.periodic_interval == 0)
             ):
-                logger.info("{} records processed".format(total_records_processed))
+                time_spent = round(time.time() - tm_begin, 3)
+                rows_per_second = None
+                if time_spent > 0:
+                    rows_per_second = round((total_records_processed / time_spent), 2)
+
+                processed_percs = round((total_size_processed/total_file_size) * 100, 2)
+
+                logger.info(
+                    "{} records processed [RPS: {} processed: {}%]".format(
+                        total_records_processed,
+                        rows_per_second,
+                        processed_percs
+                    )
+                )
 
             item_row, items_filtered = filter_row_data(
                 item_row,
                 indexes_to_filter,
                 forbidden_networks,
                 fake_ip_generator_func,
-                forbidden_cache=forbidden_items_cache
+                logger,
+                forbidden_cache=forbidden_items_cache,
+                line_index=item_index
             )
 
             data_writer.writerow(item_row)
