@@ -11,6 +11,8 @@ from dateutil.parser import parse
 import terminaltables
 
 PERIODIC_PRINT_INTERVAL = 10000
+DEFAULT_IP_ADDRESSES_MATCHER_REG_EXP = "192\.168\..*"
+
 GroupByIPAndDateKey = namedtuple("GroupByIPAndDateKey", ["ip", "date", "violation_rule"])
 
 
@@ -42,6 +44,13 @@ def parse_command_line():
         "--output",
         metavar="FILE",
         help="output file path"
+    )
+
+    parser.add_argument(
+        "--ip_address_mask",
+        action="store",
+        help="RegExp for IP addresses validation",
+        default=DEFAULT_IP_ADDRESSES_MATCHER_REG_EXP
     )
 
     return parser.parse_args()
@@ -112,7 +121,7 @@ def main():
         logger.error("file '{}' does not exists".format(args.input))
         return -1
 
-    valid_ip_address_matcher = re.compile("192\.168\..*")
+    valid_ip_address_matcher = re.compile(args.ip_address_mask)
     valid_ip_address_matcher_func = (lambda ip_address: valid_ip_address_matcher.match(ip_address))
 
     tm_begin = time.time()

@@ -2,5 +2,6 @@
 
 To start application just type:
 ```
-python app.py --input s:\tmp\big_input.csv --output s:\tmp\big_data_output.csv
+python app.py --input ../data/data.csv --output s:/tmp/output_data.csv --ip_address_mask "192\.168\..*"
 ```
+
