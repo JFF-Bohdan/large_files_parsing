@@ -17,4 +17,11 @@ Where:
 * `--delimiter ","` - delimiter char for CSV processing
 * `--quote_char "\""` - quote char for CSV processing
 
+
+In case if required you also may add keys:
+
+* `--produce_report` - in this key after processing report will be generated.
+In this report you may find original IP address and masked IP address;
+* `--periodic_interval 10000` - periodical interval between printing to console.
+
 Enjoy!

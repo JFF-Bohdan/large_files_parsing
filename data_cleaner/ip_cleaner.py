@@ -22,6 +22,7 @@ FORBIDDEN_NETWORKS = [
 ]
 
 DEFAULT_COLUMNS_TO_BE_CLEANED = "dst,ip"
+DEFAULT_PERIODIC_PRINTS = 0
 
 
 def fake_ip_generator_func(_):
@@ -80,6 +81,21 @@ def parse_command_line():
         default="\""
     )
 
+    parser.add_argument(
+        "--produce_report",
+        action="store_true",
+        help="Produce report with masked IP addresses",
+        default=False
+    )
+
+    parser.add_argument(
+        "--periodic_interval",
+        action="store",
+        help="Interval between periodical status updates to console",
+        default=DEFAULT_PERIODIC_PRINTS,
+        type=int
+    )
+
     return parser.parse_args()
 
 
@@ -108,8 +124,7 @@ def filter_row_data(
     indexes_to_filter,
     forbidden_networks,
     mock_function,
-    forbidden_cache=None,
-    logger=None
+    forbidden_cache=None
 ) -> Tuple[List, int]:
     row_len = len(item_row)
 
@@ -150,6 +165,16 @@ def filter_row_data(
     return res, items_filtered
 
 
+def produce_mapping_report(logger, forbidden_items_cache):
+    table_data = [
+        ["IP Address", "Masked IP Address"]
+    ]
+    for key, value in forbidden_items_cache.items():
+        table_data.append([key, value])
+    table = terminaltables.AsciiTable(table_data)
+    logger.info("Masked IP Addresses:\n{}".format(table.table))
+
+
 def main():
     args = parse_command_line()
 
@@ -179,7 +204,7 @@ def main():
     tm_begin = time.time()
     indexes_to_filter = []
 
-    records_processed = 0
+    total_records_processed = 0
     total_items_filtered = 0
     forbidden_items_cache = dict()
     with codecs.open(args.output, "w", "utf-8") as output_file:
@@ -191,32 +216,39 @@ def main():
                 data_writer.writerow(item_row)
                 continue
 
+            if(
+                total_records_processed and
+                args.periodic_interval and
+                (total_records_processed % args.periodic_interval == 0)
+            ):
+                logger.info("{} records processed".format(total_records_processed))
+
             item_row, items_filtered = filter_row_data(
                 item_row,
                 indexes_to_filter,
                 forbidden_networks,
                 fake_ip_generator_func,
-                forbidden_cache=forbidden_items_cache,
-                logger=logger
+                forbidden_cache=forbidden_items_cache
             )
 
             data_writer.writerow(item_row)
-            records_processed += 1
+            total_records_processed += 1
             total_items_filtered += items_filtered
 
-    table_data = [
-        ["IP Address", "Mocked IP Address"]
-    ]
-    for key, value in forbidden_items_cache.items():
-        table_data.append([key, value])
-    table = terminaltables.AsciiTable(table_data)
-    logger.info("Mocked IP Addresses:\n{}".format(table.table))
+    if args.produce_report:
+        produce_mapping_report(logger, forbidden_items_cache)
 
     time_elapsed = round(time.time() - tm_begin, 3)
+    if time_elapsed > 0:
+        rows_per_second = round((total_records_processed / time_elapsed), 2)
+    else:
+        rows_per_second = 0
+
     table_data = [
         ["Item", "Value"],
-        ["Records Processed", records_processed],
+        ["Total records Processed", total_records_processed],
         ["Items filtered", total_items_filtered],
+        ["Rows per second", rows_per_second],
         ["Time elapsed", time_elapsed]
     ]
 
