@@ -96,6 +96,13 @@ def parse_command_line():
         type=int
     )
 
+    parser.add_argument(
+        "--output_limit",
+        action="store",
+        help="Limit output to specified count of rows",
+        type=int
+    )
+
     return parser.parse_args()
 
 
@@ -239,7 +246,10 @@ def main():
                 if time_spent > 0:
                     rows_per_second = round((total_records_processed / time_spent), 2)
 
-                processed_percs = round((total_size_processed/total_file_size) * 100, 2)
+                if not args.output_limit:
+                    processed_percs = round((total_size_processed/total_file_size) * 100, 2)
+                else:
+                    processed_percs = round((total_records_processed/args.output_limit) * 100, 2)
 
                 logger.info(
                     "{} records processed [RPS: {} processed: {}%]".format(
@@ -262,6 +272,9 @@ def main():
             data_writer.writerow(item_row)
             total_records_processed += 1
             total_items_filtered += items_filtered
+
+            if args.output_limit and (total_records_processed >= args.output_limit):
+                break
 
     if args.produce_report:
         produce_mapping_report(logger, forbidden_items_cache)
