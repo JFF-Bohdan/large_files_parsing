@@ -1,4 +1,3 @@
-import argparse
 import codecs
 import copy
 import csv
@@ -6,124 +5,24 @@ import ipaddress
 import logging
 import os
 import random
+import sys
 import time
 from typing import List, Tuple
 
 import terminaltables
 
-FORBIDDEN_NETWORKS = [
-    "194.24.186.0/23",
-    "185.121.116.0/24",
-    "185.121.118.0/24",
-    "185.121.117.0/24",
-    "93.158.223.224/27",
-    "5.178.64.32/27",
-    "185.121.119.0/24"
-]
+abs_file_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(abs_file_dir)
+sys.path.append(os.path.join(abs_file_dir, ".."))
 
-DEFAULT_COLUMNS_TO_BE_CLEANED = "dst,ip"
-DEFAULT_PERIODIC_PRINTS = 0
+from data_cleaner.support_functions.ip_cleaner_functions import FORBIDDEN_NETWORKS, produce_mapping_report, parse_header_indexes  # noqa
+from data_cleaner.support_functions.support_functions import iterate_over_csv_input_data, init_logger  # noqa
+from data_cleaner.support_functions.ip_cleaner_command_line_args_initializer import parse_command_line  # noqa
 
 
 def fake_ip_generator_func(_):
     res = [random.randint(1, 254), random.randint(0, 254), random.randint(1, 254), random.randint(1, 254)]
     return ".".join([str(item) for item in res])
-
-
-def init_logger(log_name=__name__, log_level=logging.DEBUG):
-    logger = logging.getLogger(log_name)
-    logger.setLevel(log_level)
-
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-
-    ch = logging.StreamHandler()
-    ch.setLevel(log_level)
-    ch.setFormatter(formatter)
-
-    logger.addHandler(ch)
-    logger.propagate = False
-
-    return logger
-
-
-def parse_command_line():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--input",
-        metavar="FILE",
-        help="input file path"
-    )
-
-    parser.add_argument(
-        "--output",
-        metavar="FILE",
-        help="output file path"
-    )
-
-    parser.add_argument(
-        "--ip_columns",
-        action="store",
-        help="RegExp for IP addresses validation",
-        default=DEFAULT_COLUMNS_TO_BE_CLEANED
-    )
-
-    parser.add_argument(
-        "--delimiter",
-        action="store",
-        help="CSV delimiter",
-        default=","
-    )
-
-    parser.add_argument(
-        "--quote_char",
-        action="store",
-        help="CSV quote char",
-        default="\""
-    )
-
-    parser.add_argument(
-        "--produce_report",
-        action="store_true",
-        help="Produce report with masked IP addresses",
-        default=False
-    )
-
-    parser.add_argument(
-        "--periodic_interval",
-        action="store",
-        help="Interval between periodical status updates to console",
-        default=DEFAULT_PERIODIC_PRINTS,
-        type=int
-    )
-
-    parser.add_argument(
-        "--output_limit",
-        action="store",
-        help="Limit output to specified count of rows",
-        type=int
-    )
-
-    return parser.parse_args()
-
-
-def iterate_over_input_data(input_file_name, delimiter, quote_char):
-    with codecs.open(input_file_name, "r", "utf-8") as input_csvfile:
-        data_reader = csv.reader(input_csvfile, delimiter=delimiter, quotechar=quote_char)
-        for row_dict in data_reader:
-            yield row_dict
-
-
-def parse_header_indexes(item_row, ip_columns):
-    res = []
-
-    ip_columns = list(set(ip_columns))
-    for column_index, column_name in enumerate(item_row):
-        if column_name not in ip_columns:
-            continue
-
-        res.append(column_index)
-
-    return res
 
 
 def filter_row_data(
@@ -180,16 +79,6 @@ def filter_row_data(
     return res, items_filtered
 
 
-def produce_mapping_report(logger, forbidden_items_cache):
-    table_data = [
-        ["IP Address", "Masked IP Address"]
-    ]
-    for key, value in forbidden_items_cache.items():
-        table_data.append([key, value])
-    table = terminaltables.AsciiTable(table_data)
-    logger.info("Masked IP Addresses:\n{}".format(table.table))
-
-
 def main():
     args = parse_command_line()
 
@@ -228,7 +117,7 @@ def main():
     with codecs.open(args.output, "w", "utf-8") as output_file:
         data_writer = csv.writer(output_file, delimiter=args.delimiter, quotechar=args.quote_char)
 
-        for item_index, item_row in enumerate(iterate_over_input_data(args.input, args.delimiter, args.quote_char)):
+        for item_index, item_row in enumerate(iterate_over_csv_input_data(args.input, args.delimiter, args.quote_char)):
             total_size_processed += len(str(item_row)) + 2
 
             if not item_index:
@@ -247,9 +136,9 @@ def main():
                     rows_per_second = round((total_records_processed / time_spent), 2)
 
                 if not args.output_limit:
-                    processed_percs = round((total_size_processed/total_file_size) * 100, 2)
+                    processed_percs = round((total_size_processed / total_file_size) * 100, 2)
                 else:
-                    processed_percs = round((total_records_processed/args.output_limit) * 100, 2)
+                    processed_percs = round((total_records_processed / args.output_limit) * 100, 2)
 
                 logger.info(
                     "{} records processed [RPS: {} processed: {}%]".format(
