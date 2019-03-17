@@ -1,5 +1,6 @@
 import codecs
 import csv
+import ipaddress
 from typing import List
 
 import terminaltables
@@ -14,6 +15,16 @@ FORBIDDEN_NETWORKS = [
     "5.178.64.32/27",
     "185.121.119.0/24"
 ]
+
+
+def generate_forbidden_networks(networks=None) -> List[ipaddress.ip_network]:
+    ret = list()
+    networks = networks if networks else FORBIDDEN_NETWORKS
+
+    for ip_address in networks:
+        ret.append(ipaddress.ip_network(ip_address))
+
+    return ret
 
 
 def parse_header_indexes(item_row, ip_columns):

@@ -12,8 +12,9 @@ from data_cleaner.support_functions.ip_cleaner_command_line_args_initializer imp
 from data_cleaner.support_functions.support_functions import init_logger  # noqa
 from data_cleaner.ip_cleaner_processors.csv_writer import csv_writer_process  # noqa
 from data_cleaner.ip_cleaner_processors.csv_reader import csv_reader_process  # noqa
-from data_cleaner.ip_cleaner_processors.ip_filter import csv_filter_process  # noqa
-from data_cleaner.support_functions.ip_cleaner_functions import parse_header_indexes, read_csv_header  # noqa
+from data_cleaner.ip_cleaner_processors.ip_filter import csv_filter_process, MappedIpAddress  # noqa
+from data_cleaner.support_functions.ip_cleaner_functions_and_consts import FORBIDDEN_NETWORKS, parse_header_indexes, \
+    produce_mapping_report, read_csv_header  # noqa
 
 
 def main():
@@ -66,12 +67,19 @@ def main():
     logger.info("starting process for tasks results writing")
     results_writer_process.start()
 
-    required_task_processing_processors_count = mp.cpu_count()
+    required_task_processing_processors_count = mp.cpu_count() // 2
     list_of_processing_processes = list()
+
+    # mapped_ip_addresses_lock = mp.Lock()
+    # mapped_ip_addresses = mp.Array(MappedIpAddress, [], lock=mapped_ip_addresses_lock)
+
+    manager = mp.Manager()
+    mapped_ip_addresses = manager.dict()
+
     for _ in range(required_task_processing_processors_count):
         data_processor = mp.Process(
             target=csv_filter_process,
-            args=(tasks_to_accomplish, write_tasks)
+            args=(tasks_to_accomplish, FORBIDDEN_NETWORKS, indexes_to_filter, write_tasks, mapped_ip_addresses)
         )
 
         list_of_processing_processes.append(data_processor)
@@ -95,6 +103,9 @@ def main():
 
     logger.info("task processing complete")
     time_elapsed = round(time.time() - tm_begin, 3)
+
+    if args.produce_report:
+        produce_mapping_report(logger, mapped_ip_addresses)
 
     logger.info("application finished in {}".format(time_elapsed))
     return 0

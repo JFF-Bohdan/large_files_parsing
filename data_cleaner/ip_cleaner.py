@@ -15,7 +15,8 @@ abs_file_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(abs_file_dir)
 sys.path.append(os.path.join(abs_file_dir, ".."))
 
-from data_cleaner.support_functions.ip_cleaner_functions import FORBIDDEN_NETWORKS, produce_mapping_report, parse_header_indexes  # noqa
+from data_cleaner.support_functions.ip_cleaner_functions_and_consts import produce_mapping_report, \
+    parse_header_indexes, generate_forbidden_networks  # noqa
 from data_cleaner.support_functions.support_functions import iterate_over_csv_input_data, init_logger  # noqa
 from data_cleaner.support_functions.ip_cleaner_command_line_args_initializer import parse_command_line  # noqa
 
@@ -98,9 +99,7 @@ def main():
         logger.error("No ip columns specified to be filtered")
         return -1
 
-    forbidden_networks = []
-    for ip_address in FORBIDDEN_NETWORKS:
-        forbidden_networks.append(ipaddress.ip_network(ip_address))
+    forbidden_networks = generate_forbidden_networks()
 
     logger.info("going to process file '{}'".format(args.input))
     logger.info("going to generate results into '{}'".format(args.output))
