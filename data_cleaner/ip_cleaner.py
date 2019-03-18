@@ -15,8 +15,8 @@ abs_file_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(abs_file_dir)
 sys.path.append(os.path.join(abs_file_dir, ".."))
 
-from data_cleaner.support_functions.ip_cleaner_functions_and_consts import produce_mapping_report, \
-    parse_header_indexes, generate_forbidden_networks  # noqa
+from data_cleaner.support_functions.ip_cleaner_functions_and_consts import (produce_mapping_report,  # noqa
+    parse_header_indexes, generate_forbidden_networks)
 from data_cleaner.support_functions.support_functions import iterate_over_csv_input_data, init_logger  # noqa
 from data_cleaner.support_functions.ip_cleaner_command_line_args_initializer import parse_command_line  # noqa
 
@@ -178,6 +178,7 @@ def main():
         ["Total records Processed", total_records_processed],
         ["Items filtered", total_items_filtered],
         ["Rows per second", rows_per_second],
+        ["Mapped IP addresses count", len(forbidden_items_cache)],
         ["Time elapsed", time_elapsed]
     ]
 

@@ -4,6 +4,8 @@ import os
 import sys
 import time
 
+import terminaltables
+
 abs_file_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(abs_file_dir)
 sys.path.append(os.path.join(abs_file_dir, ".."))
@@ -12,9 +14,10 @@ from data_cleaner.support_functions.ip_cleaner_command_line_args_initializer imp
 from data_cleaner.support_functions.support_functions import init_logger  # noqa
 from data_cleaner.ip_cleaner_processors.csv_writer import csv_writer_process  # noqa
 from data_cleaner.ip_cleaner_processors.csv_reader import csv_reader_process  # noqa
-from data_cleaner.ip_cleaner_processors.ip_filter import csv_filter_process, MappedIpAddress  # noqa
+from data_cleaner.ip_cleaner_processors.ip_filter import csv_filter_process  # noqa
 from data_cleaner.support_functions.ip_cleaner_functions_and_consts import FORBIDDEN_NETWORKS, parse_header_indexes, \
     produce_mapping_report, read_csv_header  # noqa
+from data_cleaner.ip_cleaner_processors.shared_settings import FILTERING_TASK_SIZE, WRITING_TASK_SIZE  # noqa
 
 
 def main():
@@ -51,14 +54,31 @@ def main():
     tasks_to_accomplish = mp.Queue()
     write_tasks = mp.Queue()
 
+    total_records_processed = mp.Value("i", 0)
     tasks_generator_process = mp.Process(
         target=csv_reader_process,
-        args=(args.input, args.delimiter, args.quote_char, args.output_limit, tasks_to_accomplish,)
+        args=(
+            args.input,
+            args.delimiter,
+            args.quote_char,
+            args.output_limit,
+            tasks_to_accomplish,
+            total_records_processed,
+            args.periodic_interval,
+            FILTERING_TASK_SIZE
+        )
     )
 
     results_writer_process = mp.Process(
         target=csv_writer_process,
-        args=(args.output, args.delimiter, args.quote_char, csv_header, write_tasks)
+        args=(
+            args.output,
+            args.delimiter,
+            args.quote_char,
+            csv_header,
+            write_tasks,
+            args.periodic_interval
+        )
     )
 
     logger.info("starting process for tasks reading")
@@ -67,19 +87,28 @@ def main():
     logger.info("starting process for tasks results writing")
     results_writer_process.start()
 
-    required_task_processing_processors_count = mp.cpu_count() // 2
+    required_task_processing_processors_count = max((mp.cpu_count() // 2) - 1, 1)
     list_of_processing_processes = list()
 
-    # mapped_ip_addresses_lock = mp.Lock()
-    # mapped_ip_addresses = mp.Array(MappedIpAddress, [], lock=mapped_ip_addresses_lock)
-
+    mapped_ip_addresses_lock = mp.Lock()
     manager = mp.Manager()
-    mapped_ip_addresses = manager.dict()
+    mapped_ip_addresses_global_cache = manager.dict()
+    total_items_filtered = mp.Value("i", 0)
 
     for _ in range(required_task_processing_processors_count):
         data_processor = mp.Process(
             target=csv_filter_process,
-            args=(tasks_to_accomplish, FORBIDDEN_NETWORKS, indexes_to_filter, write_tasks, mapped_ip_addresses)
+            args=(
+                tasks_to_accomplish,
+                FORBIDDEN_NETWORKS,
+                indexes_to_filter,
+                write_tasks,
+                mapped_ip_addresses_global_cache,
+                mapped_ip_addresses_lock,
+                total_items_filtered,
+                WRITING_TASK_SIZE,
+                args.periodic_interval
+            )
         )
 
         list_of_processing_processes.append(data_processor)
@@ -89,7 +118,7 @@ def main():
     tasks_generator_process.join()
     logger.info("len(tasks_to_accomplish): {}".format(tasks_to_accomplish.qsize()))
 
-    logger.info("adding poison pill")
+    logger.info("adding poison pill for filter processes")
     for _ in range(required_task_processing_processors_count):
         tasks_to_accomplish.put(None)
 
@@ -97,6 +126,7 @@ def main():
     for p in list_of_processing_processes:
         p.join()
 
+    logger.info("adding poison pill for writer process")
     write_tasks.put(None)
     logger.info("joining writer")
     results_writer_process.join()
@@ -105,7 +135,25 @@ def main():
     time_elapsed = round(time.time() - tm_begin, 3)
 
     if args.produce_report:
-        produce_mapping_report(logger, mapped_ip_addresses)
+        produce_mapping_report(logger, mapped_ip_addresses_global_cache)
+
+    if time_elapsed > 0:
+        rows_per_second = round((total_records_processed.value / time_elapsed), 2)
+    else:
+        rows_per_second = 0
+
+    table_data = [
+        ["Item", "Value"],
+        ["Total records processed", total_records_processed.value],
+        ["Items filtered", total_items_filtered.value],
+        ["Rows per second", rows_per_second],
+        ["Mapped IP addresses count", len(mapped_ip_addresses_global_cache)],
+        ["Filter processes count", required_task_processing_processors_count],
+        ["Time elapsed", time_elapsed]
+    ]
+
+    table = terminaltables.AsciiTable(table_data)
+    logger.info("\n{}".format(table.table))
 
     logger.info("application finished in {}".format(time_elapsed))
     return 0

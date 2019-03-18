@@ -9,7 +9,7 @@ exclude =
 	__init__.py
 
 max-line-length = 120
-max-complexity = 10
+max-complexity = 15
 filename = *.py
 format = default
 inline-quotes = "

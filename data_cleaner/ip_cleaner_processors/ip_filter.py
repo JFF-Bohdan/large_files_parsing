@@ -1,39 +1,41 @@
+import ipaddress
 import logging
 import queue
-from multiprocessing import current_process
-import ipaddress
 import random
+from functools import partial
+from multiprocessing import current_process
 
 from data_cleaner.support_functions.ip_cleaner_functions_and_consts import generate_forbidden_networks
-from .shared_settings import PERIODICAL_PRINT_INTERVAL, WRITING_TASK_SIZE
 from data_cleaner.support_functions.support_functions import init_logger
-from ctypes import Structure, c_wchar_p
-from functools import partial
 
 
-# class MappedIpAddress(Structure):
-#     _fields_ = [('original_ip_address', c_wchar_p), ('mapped_ip_address', c_wchar_p)]
+def fake_ip_generator_func(ip_address_to_map, global_mapped_list, mapped_ip_addresses_lock):
+    with mapped_ip_addresses_lock:
+        ret = global_mapped_list.get(ip_address_to_map, None)
+        if ret:
+            return ret
+
+        mapped_ip_address = [
+            random.randint(1, 254),
+            random.randint(0, 254),
+            random.randint(1, 254),
+            random.randint(1, 254)
+        ]
+        mapped_ip_address = ".".join([str(item) for item in mapped_ip_address])
+
+        global_mapped_list[ip_address_to_map] = mapped_ip_address
+        return mapped_ip_address
 
 
-def fake_ip_generator_func(_):
-
-    mapped_ip_address = [random.randint(1, 254), random.randint(0, 254), random.randint(1, 254), random.randint(1, 254)]
-    mapped_ip_address = ".".join([str(item) for item in mapped_ip_address])
-    return mapped_ip_address
-
-    # mapped_obj = MappedIpAddress()
-    # mapped_obj.original_ip_address = ip_address_to_map
-    # mapped_obj.mapped_ip_address = mapped_ip_address
-    #
-    # global_mapped_list.append(mapped_obj)
-    #
-    # return mapped_ip_address
-
-
-
-def filter_ip_addresses(row_data, indexes_to_filter, forbidden_networks, mock_function, forbidden_cache, logger):
-    # forbidden_cache = {}
-
+def filter_ip_addresses(
+        line_index,
+        row_data,
+        indexes_to_filter,
+        forbidden_networks,
+        mock_function,
+        forbidden_cache,
+        logger
+):
     row_len = len(row_data)
     res = row_data
 
@@ -79,19 +81,30 @@ def filter_ip_addresses(row_data, indexes_to_filter, forbidden_networks, mock_fu
     return res, items_filtered
 
 
-def csv_filter_process(input_tasks_queue, networks_to_filter, indexes_to_filter, output_tasks_queue, global_mapped_ip_addresses):
+def csv_filter_process(
+        input_tasks_queue,
+        networks_to_filter,
+        indexes_to_filter,
+        output_tasks_queue,
+        global_mapped_ip_addresses,
+        mapped_ip_addresses_lock,
+        global_total_items_filtered,
+        write_task_chunk_size,
+        periodic_print_interval
+):
     processed_rows = 0
     current_process_name = current_process().name
 
     forbidden_networks = generate_forbidden_networks(networks_to_filter)
     logger = init_logger(current_process_name, logging.DEBUG)
-    logger.info("process started")
+    logger.info("filter process started")
 
-    # mapped_cache = {}
-    # for mapped_obj in global_mapped_ip_addresses:
-    #     mapped_cache[mapped_obj.original_ip_address] = mapped_obj.mapped_ip_address
-
-    # partial_fake_ip_generator_func = partial(fake_ip_generator_func, global_mapped_list=global_mapped_ip_addresses)
+    local_mapped_cache = {}
+    partial_fake_ip_generator_func = partial(
+        fake_ip_generator_func,
+        global_mapped_list=global_mapped_ip_addresses,
+        mapped_ip_addresses_lock=mapped_ip_addresses_lock
+    )
 
     items_filtered_in_process = 0
     while True:
@@ -101,24 +114,25 @@ def csv_filter_process(input_tasks_queue, networks_to_filter, indexes_to_filter,
                 break
 
             write_tasks = list()
-            for row_to_process in task_data:
+            for initial_line_index, row_to_process in task_data:
                 result_item, items_filtered = filter_ip_addresses(
+                    initial_line_index,
                     row_to_process,
                     indexes_to_filter,
                     forbidden_networks,
-                    fake_ip_generator_func,
-                    global_mapped_ip_addresses,
+                    partial_fake_ip_generator_func,
+                    local_mapped_cache,
                     logger
                 )
                 items_filtered_in_process += items_filtered
 
                 write_tasks.append(result_item)
-                if len(write_tasks) >= WRITING_TASK_SIZE:
+                if len(write_tasks) >= write_task_chunk_size:
                     output_tasks_queue.put(write_tasks)
                     write_tasks = list()
 
                 processed_rows += 1
-                if processed_rows % PERIODICAL_PRINT_INTERVAL == 0:
+                if periodic_print_interval and (processed_rows % periodic_print_interval == 0):
                     logger.info("filter[{}] processed records count: {}".format(current_process_name, processed_rows))
 
             if write_tasks:
@@ -127,5 +141,6 @@ def csv_filter_process(input_tasks_queue, networks_to_filter, indexes_to_filter,
         except queue.Empty:
             break
 
-    logger.info("items_filtered_in_process: {}".format(items_filtered_in_process))
+    logger.info("filter process finished (items_filtered_in_process: {})".format(items_filtered_in_process))
+    global_total_items_filtered.value += items_filtered_in_process
     return True
