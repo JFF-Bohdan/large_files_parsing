@@ -71,6 +71,8 @@ def generate_output_grouped_by_date_ip_and_violated_rule(input_file_name, is_ip_
         ip_address = data_dict["dst"]
         ip_address = str(ip_address).strip()
 
+        total_rows_processed = index + 1
+
         if index and (index % PERIODIC_PRINT_INTERVAL == 0):
             logger.info("{} records processed".format(index))
 
@@ -83,8 +85,6 @@ def generate_output_grouped_by_date_ip_and_violated_rule(input_file_name, is_ip_
         key = GroupByIPAndDateKey(ip=ip_address, date=timestamp.date(), violation_rule=data_dict["message"])
         result_counter[key] += 1
 
-        total_rows_processed = index
-
     logger.info("saving output data")
     dialect = csv.excel
     dialect.delimiter = ";"
@@ -96,7 +96,7 @@ def generate_output_grouped_by_date_ip_and_violated_rule(input_file_name, is_ip_
         writer.writerow(header)
 
         keys = result_counter.keys()
-        keys = sorted(keys, key=(lambda x: x.date))
+        keys = sorted(keys, key=(lambda x: tuple([x.date, x.ip, x.violation_rule])))
 
         for key in keys:
             violations_count = result_counter[key]
