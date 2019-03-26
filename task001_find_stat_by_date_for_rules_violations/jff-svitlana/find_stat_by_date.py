@@ -2,8 +2,11 @@ import csv
 import os
 from collections import defaultdict
 import argparse
+import time
+import datetime
 
 IP_FILTER = '192.168'
+
 
 def cleaned_data_generator(data_file_name):
     with open(data_file_name) as data_file:
@@ -42,4 +45,10 @@ if __name__ == "__main__":
         print("Error! File does not exist!:\n{} ".format(args.input_file))
         exit(1)
 
+    start_time = time.time()
+
     create_stat_file(args.input_file, args.output_file)
+
+    time_delta = time.time() - start_time
+    running_time = str(datetime.timedelta(seconds=time_delta))
+    print("Time of running: {}".format(running_time))
