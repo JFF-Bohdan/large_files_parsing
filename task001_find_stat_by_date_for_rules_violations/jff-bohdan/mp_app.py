@@ -139,6 +139,7 @@ def main():
         ["Parameter", "Value"],
         ["Total records read", total_records_read.value],
         ["Records processed", total_records_processed.value],
+        ["Data processors count", required_task_processing_processors_count],
         ["Result records count", result_rows_count],
         ["Records per second", records_per_second],
         ["Time spent", seconds_spent]
